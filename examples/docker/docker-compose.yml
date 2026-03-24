@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  mcp-gateway:
+    image: ghcr.io/harrisonCN/mcp-gateway:latest
+    # Or build locally:
+    # build:
+    #   context: ../..
+    #   dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      MCP_GATEWAY_PORT: "4000"
+      MCP_GATEWAY_LOG_LEVEL: "info"
+      MCP_GATEWAY_API_KEYS: "your-secret-key"
+      GITHUB_TOKEN: "${GITHUB_TOKEN}"
+      DATABASE_URL: "postgresql://user:pass@postgres:5432/mydb"
+    volumes:
+      - ./mcp-gateway.yml:/app/mcp-gateway.yml:ro
+      - /tmp:/tmp
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: mydb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # Optional: Prometheus + Grafana for metrics visualization
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

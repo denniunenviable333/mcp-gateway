@@ -1,0 +1,34 @@
+# Basic mcp-gateway configuration
+# Manages two MCP servers: filesystem and GitHub
+
+port: 4000
+host: 0.0.0.0
+logLevel: info
+
+monitor:
+  requestLog: true
+  prometheus: false
+  retentionHours: 24
+
+servers:
+  - id: filesystem
+    name: Filesystem Server
+    description: Read and write local files
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    tags: [files, local]
+    enabled: true
+    timeout: 15000
+
+  - id: github
+    name: GitHub Server
+    description: Interact with GitHub repositories and issues
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
+    tags: [github, vcs]
+    enabled: true
+    timeout: 30000

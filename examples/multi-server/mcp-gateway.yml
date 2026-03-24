@@ -1,0 +1,80 @@
+# Multi-server configuration with auth and rate limiting
+
+port: 4000
+host: 0.0.0.0
+logLevel: info
+
+# API key authentication
+auth:
+  strategy: api-key
+  apiKeys:
+    - "dev-key-replace-me"
+    - "prod-key-replace-me"
+
+# Rate limiting: 200 requests per minute per key
+rateLimit:
+  limit: 200
+  windowSeconds: 60
+  perKey: true
+
+# CORS (restrict to your frontend domain in production)
+corsOrigins:
+  - "http://localhost:3000"
+  - "https://your-app.example.com"
+
+monitor:
+  requestLog: true
+  prometheus: true    # Expose /api/v1/metrics in Prometheus format
+  retentionHours: 168 # Keep 7 days of metrics
+
+servers:
+  - id: filesystem
+    name: Filesystem
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
+    tags: [files]
+    maxConcurrency: 5
+
+  - id: github
+    name: GitHub
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
+    tags: [github]
+    maxConcurrency: 10
+
+  - id: postgres
+    name: PostgreSQL
+    description: Query your PostgreSQL database
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-postgres", "${DATABASE_URL}"]
+    tags: [database, sql]
+    timeout: 60000
+    maxConcurrency: 20
+
+  - id: brave-search
+    name: Brave Search
+    description: Web search via Brave API
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-brave-search"]
+    env:
+      BRAVE_API_KEY: "${BRAVE_API_KEY}"
+    tags: [search, web]
+    maxConcurrency: 5
+
+  - id: slack
+    name: Slack
+    description: Send messages and read channels
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-slack"]
+    env:
+      SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN}"
+      SLACK_TEAM_ID: "${SLACK_TEAM_ID}"
+    tags: [communication, slack]
+    enabled: true

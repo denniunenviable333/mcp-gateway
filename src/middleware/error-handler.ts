@@ -1,0 +1,95 @@
+/**
+ * Centralized Error Handler Middleware
+ *
+ * Bug fix (v0.1.0): unhandled errors leaked raw stack traces and returned
+ * inconsistent response shapes. This middleware normalises all errors into
+ * a single JSON envelope and never exposes internal stack traces in production.
+ *
+ * @module middleware/error-handler
+ */
+
+import { Request, Response, NextFunction } from 'express';
+
+export interface ErrorResponse {
+  error: {
+    code: string;
+    message: string;
+    requestId?: string;
+    details?: unknown;
+  };
+}
+
+export class GatewayError extends Error {
+  constructor(
+    public readonly statusCode: number,
+    public readonly code: string,
+    message: string,
+    public readonly details?: unknown,
+  ) {
+    super(message);
+    this.name = 'GatewayError';
+  }
+}
+
+// Well-known error codes
+export const ErrorCodes = {
+  UNAUTHORIZED: 'UNAUTHORIZED',
+  FORBIDDEN: 'FORBIDDEN',
+  NOT_FOUND: 'NOT_FOUND',
+  TOOL_NOT_FOUND: 'TOOL_NOT_FOUND',
+  SERVER_NOT_FOUND: 'SERVER_NOT_FOUND',
+  SERVER_UNAVAILABLE: 'SERVER_UNAVAILABLE',
+  RATE_LIMITED: 'RATE_LIMITED',
+  TIMEOUT: 'TIMEOUT',
+  BAD_REQUEST: 'BAD_REQUEST',
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+} as const;
+
+export function errorHandler(
+  err: unknown,
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): void {
+  const isDev = process.env.NODE_ENV !== 'production';
+
+  if (err instanceof GatewayError) {
+    const body: ErrorResponse = {
+      error: {
+        code: err.code,
+        message: err.message,
+        requestId: (req as any).requestId,
+        ...(isDev && err.details ? { details: err.details } : {}),
+      },
+    };
+    res.status(err.statusCode).json(body);
+    return;
+  }
+
+  // Unknown / unexpected errors
+  const message =
+    isDev && err instanceof Error ? err.message : 'Internal server error';
+
+  const body: ErrorResponse = {
+    error: {
+      code: ErrorCodes.INTERNAL_ERROR,
+      message,
+      requestId: (req as any).requestId,
+      ...(isDev && err instanceof Error ? { details: err.stack } : {}),
+    },
+  };
+
+  res.status(500).json(body);
+}
+
+export function notFoundHandler(req: Request, res: Response): void {
+  const body: ErrorResponse = {
+    error: {
+      code: ErrorCodes.NOT_FOUND,
+      message: `Route ${req.method} ${req.path} not found`,
+      requestId: (req as any).requestId,
+    },
+  };
+  res.status(404).json(body);
+}

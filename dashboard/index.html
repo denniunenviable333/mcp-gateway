@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mcp-gateway — Dashboard</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --yellow: #d29922;
+      --red: #f85149;
+      --purple: #bc8cff;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; }
+
+    /* ── Layout ── */
+    header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 24px; border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    header .logo { font-size: 18px; font-weight: 700; color: var(--accent); letter-spacing: -0.5px; }
+    header .version { font-size: 11px; background: var(--border); border-radius: 12px; padding: 2px 8px; color: var(--muted); }
+    header .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-left: auto; }
+    header .status-dot.offline { background: var(--red); }
+    header .status-label { font-size: 12px; color: var(--muted); }
+    header .refresh-btn {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+    }
+    header .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+
+    /* ── Stat Cards ── */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 16px; display: flex; flex-direction: column; gap: 4px;
+    }
+    .stat-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-card .value { font-size: 28px; font-weight: 700; }
+    .stat-card .sub { font-size: 11px; color: var(--muted); }
+    .value.green { color: var(--green); }
+    .value.yellow { color: var(--yellow); }
+    .value.red { color: var(--red); }
+    .value.blue { color: var(--accent); }
+
+    /* ── Section ── */
+    .section { margin-bottom: 24px; }
+    .section-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+
+    /* ── Table ── */
+    .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 10px 16px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+    td { padding: 10px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; padding: 2px 8px; border-radius: 12px; font-weight: 500;
+    }
+    .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+    .badge.healthy { background: rgba(63,185,80,.15); color: var(--green); }
+    .badge.healthy::before { background: var(--green); }
+    .badge.degraded { background: rgba(210,153,34,.15); color: var(--yellow); }
+    .badge.degraded::before { background: var(--yellow); }
+    .badge.offline { background: rgba(248,81,73,.15); color: var(--red); }
+    .badge.offline::before { background: var(--red); }
+
+    /* ── Method tag ── */
+    .method { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+    .method.post { background: rgba(63,185,80,.15); color: var(--green); }
+    .method.get { background: rgba(88,166,255,.15); color: var(--accent); }
+
+    /* ── Code ── */
+    code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; color: var(--purple); }
+
+    /* ── Chart ── */
+    .chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    canvas { width: 100% !important; }
+
+    /* ── Two-col ── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── Empty state ── */
+    .empty { text-align: center; padding: 32px; color: var(--muted); }
+
+    /* ── Loader ── */
+    .loader { text-align: center; padding: 48px; color: var(--muted); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="logo">⇌ mcp-gateway</span>
+  <span class="version">v0.2.0</span>
+  <span id="status-dot" class="status-dot offline"></span>
+  <span id="status-label" class="status-label">Connecting…</span>
+  <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+</header>
+
+<main>
+  <!-- Stat Cards -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <span class="label">Servers</span>
+      <span class="value blue" id="stat-servers">—</span>
+      <span class="sub" id="stat-servers-sub">loading…</span>
+    </div>
+    <div class="stat-card">
+      <span class="label">Tools</span>
+      <span class="value blue" id="stat-tools">—</span>
+      <span class="sub">across all servers</span>
+    </div>
+    <div class="stat-card">
+      <span class="label">Total Requests</span>
+      <span class="value" id="stat-requests">—</span>
+      <span class="sub" id="stat-requests-sub">since startup</span>
+    </div>
+    <div class="stat-card">
+      <span class="label">Error Rate</span>
+      <span class="value" id="stat-error-rate">—</span>
+      <span class="sub">last 5 min</span>
+    </div>
+    <div class="stat-card">
+      <span class="label">Avg Latency</span>
+      <span class="value" id="stat-latency">—</span>
+      <span class="sub">p50 (ms)</span>
+    </div>
+    <div class="stat-card">
+      <span class="label">Uptime</span>
+      <span class="value green" id="stat-uptime">—</span>
+      <span class="sub" id="stat-started">—</span>
+    </div>
+  </div>
+
+  <!-- Servers + Tools -->
+  <div class="two-col">
+    <div class="section">
+      <div class="section-title">Servers</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Name</th><th>Transport</th><th>Tools</th><th>Status</th></tr></thead>
+          <tbody id="servers-tbody"><tr><td colspan="5" class="loader"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Tools</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Server</th><th>Calls</th></tr></thead>
+          <tbody id="tools-tbody"><tr><td colspan="3" class="loader"><span class="spinner"></span></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Requests -->
+  <div class="section">
+    <div class="section-title">Recent Requests</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Time</th><th>Method</th><th>Tool</th><th>Server</th><th>Duration</th><th>Status</th></tr></thead>
+        <tbody id="requests-tbody"><tr><td colspan="6" class="loader"><span class="spinner"></span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script>
+  const BASE = window.location.origin;
+
+  async function fetchJSON(path) {
+    const r = await fetch(BASE + path);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  }
+
+  function fmtDuration(ms) {
+    if (ms == null) return '—';
+    if (ms < 1000) return ms + 'ms';
+    return (ms / 1000).toFixed(2) + 's';
+  }
+
+  function fmtUptime(seconds) {
+    if (seconds == null) return '—';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  }
+
+  function statusBadge(status) {
+    const cls = status === 'healthy' ? 'healthy' : status === 'degraded' ? 'degraded' : 'offline';
+    return `<span class="badge ${cls}">${status ?? 'unknown'}</span>`;
+  }
+
+  async function loadHealth() {
+    try {
+      const data = await fetchJSON('/api/v1/health');
+      const dot = document.getElementById('status-dot');
+      const lbl = document.getElementById('status-label');
+      dot.className = 'status-dot' + (data.status === 'ok' ? '' : ' offline');
+      lbl.textContent = data.status === 'ok' ? 'Gateway online' : 'Gateway degraded';
+
+      document.getElementById('stat-servers').textContent = data.servers?.total ?? '—';
+      document.getElementById('stat-servers-sub').textContent =
+        `${data.servers?.healthy ?? 0} healthy, ${data.servers?.unhealthy ?? 0} offline`;
+      document.getElementById('stat-uptime').textContent = fmtUptime(data.uptimeSeconds);
+      document.getElementById('stat-started').textContent =
+        data.startedAt ? 'since ' + new Date(data.startedAt).toLocaleTimeString() : '';
+    } catch (e) {
+      document.getElementById('status-label').textContent = 'Cannot reach gateway';
+    }
+  }
+
+  async function loadServers() {
+    try {
+      const data = await fetchJSON('/api/v1/servers');
+      const tbody = document.getElementById('servers-tbody');
+      if (!data.servers?.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">No servers registered</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.servers.map(s => `
+        <tr>
+          <td><code>${s.id}</code></td>
+          <td>${s.name}</td>
+          <td><span class="badge healthy">${s.transport ?? 'stdio'}</span></td>
+          <td>${s.toolCount ?? 0}</td>
+          <td>${statusBadge(s.status)}</td>
+        </tr>`).join('');
+    } catch {
+      document.getElementById('servers-tbody').innerHTML =
+        '<tr><td colspan="5" class="empty">Failed to load servers</td></tr>';
+    }
+  }
+
+  async function loadTools() {
+    try {
+      const data = await fetchJSON('/api/v1/tools');
+      const tbody = document.getElementById('tools-tbody');
+      document.getElementById('stat-tools').textContent = data.tools?.length ?? '—';
+      if (!data.tools?.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="empty">No tools available</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.tools.slice(0, 20).map(t => `
+        <tr>
+          <td><code>${t.name}</code></td>
+          <td>${t.serverName ?? t.serverId ?? '—'}</td>
+          <td>${t.callCount ?? 0}</td>
+        </tr>`).join('');
+    } catch {
+      document.getElementById('tools-tbody').innerHTML =
+        '<tr><td colspan="3" class="empty">Failed to load tools</td></tr>';
+    }
+  }
+
+  async function loadMetrics() {
+    try {
+      const data = await fetchJSON('/api/v1/metrics');
+      const m = data.aggregate ?? data;
+      document.getElementById('stat-requests').textContent =
+        (m.totalRequests ?? '—').toLocaleString?.() ?? m.totalRequests ?? '—';
+      const errRate = m.errorRate != null ? (m.errorRate * 100).toFixed(1) + '%' : '—';
+      const errEl = document.getElementById('stat-error-rate');
+      errEl.textContent = errRate;
+      errEl.className = 'value ' + (m.errorRate > 0.05 ? 'red' : m.errorRate > 0.01 ? 'yellow' : 'green');
+      document.getElementById('stat-latency').textContent =
+        m.p50LatencyMs != null ? m.p50LatencyMs + 'ms' : '—';
+    } catch { /* metrics endpoint optional */ }
+  }
+
+  async function loadRequests() {
+    try {
+      const data = await fetchJSON('/api/v1/requests?limit=20');
+      const tbody = document.getElementById('requests-tbody');
+      const reqs = data.requests ?? [];
+      if (!reqs.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">No requests yet</td></tr>';
+        return;
+      }
+      tbody.innerHTML = reqs.map(r => {
+        const ok = r.status < 400;
+        const statusColor = ok ? 'green' : r.status < 500 ? 'yellow' : 'red';
+        return `<tr>
+          <td style="color:var(--muted)">${new Date(r.timestamp).toLocaleTimeString()}</td>
+          <td><span class="method ${r.method?.toLowerCase()}">${r.method}</span></td>
+          <td><code>${r.tool ?? r.path ?? '—'}</code></td>
+          <td>${r.server ?? '—'}</td>
+          <td>${fmtDuration(r.durationMs)}</td>
+          <td style="color:var(--${statusColor})">${r.status}</td>
+        </tr>`;
+      }).join('');
+    } catch {
+      document.getElementById('requests-tbody').innerHTML =
+        '<tr><td colspan="6" class="empty">Failed to load requests</td></tr>';
+    }
+  }
+
+  async function loadAll() {
+    await Promise.allSettled([
+      loadHealth(),
+      loadServers(),
+      loadTools(),
+      loadMetrics(),
+      loadRequests(),
+    ]);
+  }
+
+  // Initial load + auto-refresh every 10s
+  loadAll();
+  setInterval(loadAll, 10_000);
+</script>
+</body>
+</html>

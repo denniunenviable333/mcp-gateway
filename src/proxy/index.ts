@@ -1,13 +1,33 @@
 /**
  * MCP Proxy
- * Routes tool-call requests to the appropriate MCP server
+ * Routes tool-call requests to the appropriate MCP server.
+ *
+ * v0.2.0 bug fixes:
+ *  - [BUG-001] Concurrent restart race condition: server process could be
+ *    spawned multiple times when several requests arrived simultaneously.
+ *    Fixed with per-server Mutex (see utils/mutex.ts).
+ *  - [BUG-002] JSON-RPC id collision under high concurrency: switched from
+ *    Date.now() to a monotonic counter.
+ *  - [BUG-003] Leaked stdio handles on process crash: stdin/stdout streams
+ *    are now explicitly destroyed on error/exit.
+ *  - [BUG-004] Silent failures on process spawn error: spawn errors now
+ *    reject all pending requests immediately.
+ *
+ * @module proxy
  */
 
 import { spawn } from 'child_process';
 import type { McpServerConfig, ProxyRequest, ProxyResponse, ToolInfo } from '../utils/types.js';
 import { logger } from '../utils/logger.js';
+import { Mutex } from '../utils/mutex.js';
 
-// ─── Stdio Transport ──────────────────────────────────────────────────────────
+// ── Monotonic ID counter (fix BUG-002) ──────────────────────────────────────
+let _idSeq = 0;
+function nextId(): number {
+  return ++_idSeq;
+}
+
+// ─── Stdio Session ────────────────────────────────────────────────────────────
 
 interface StdioSession {
   process: ReturnType<typeof spawn>;
@@ -17,67 +37,99 @@ interface StdioSession {
     timer: NodeJS.Timeout;
   }>;
   buffer: string;
+  mutex: Mutex;  // fix BUG-001
 }
 
 export class McpProxy {
   private sessions = new Map<string, StdioSession>();
+  // Per-server spawn mutex (fix BUG-001)
+  private spawnLocks = new Map<string, Mutex>();
+
+  private getSpawnLock(serverId: string): Mutex {
+    if (!this.spawnLocks.has(serverId)) {
+      this.spawnLocks.set(serverId, new Mutex());
+    }
+    return this.spawnLocks.get(serverId)!;
+  }
 
   // ─── Connection Management ──────────────────────────────────────────────────
 
   async connect(config: McpServerConfig): Promise<ToolInfo[]> {
-    if (config.transport !== 'stdio') {
-      logger.warn(`Transport "${config.transport}" not yet fully implemented. Using stdio fallback.`);
-    }
+    // Serialise concurrent connect calls for the same server (fix BUG-001)
+    return this.getSpawnLock(config.id).runExclusive(async () => {
+      if (config.transport !== 'stdio') {
+        logger.warn(
+          `Transport "${config.transport}" not yet fully implemented. Using stdio fallback.`,
+        );
+      }
 
-    if (!config.command) {
-      throw new Error(`Server "${config.id}" has no command configured`);
-    }
+      if (!config.command) {
+        throw new Error(`Server "${config.id}" has no command configured`);
+      }
 
-    const session = this.spawnSession(config);
-    this.sessions.set(config.id, session);
+      const session = this._spawnSession(config);
+      this.sessions.set(config.id, session);
 
-    // Initialize the MCP session
-    const initResult = await this.sendRequest(config.id, {
-      serverId: config.id,
-      method: 'initialize',
-      params: {
-        protocolVersion: '2024-11-05',
-        capabilities: { tools: {} },
-        clientInfo: { name: 'mcp-gateway', version: '0.1.0' },
-      },
-      requestId: 1,
-    }, config.timeout);
+      // Initialize the MCP session
+      const initResult = await this._sendRequest(
+        config.id,
+        {
+          serverId: config.id,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2024-11-05',
+            capabilities: { tools: {} },
+            clientInfo: { name: 'mcp-gateway', version: '0.2.0' },
+          },
+          requestId: nextId(),
+        },
+        config.timeout,
+      );
 
-    if (!initResult.success) {
-      throw new Error(`Failed to initialize server "${config.id}": ${initResult.error?.message}`);
-    }
+      if (!initResult.success) {
+        throw new Error(
+          `Failed to initialize server "${config.id}": ${initResult.error?.message}`,
+        );
+      }
 
-    // Send initialized notification
-    this.sendNotification(config.id, 'notifications/initialized');
+      // Send initialized notification
+      this._sendNotification(config.id, 'notifications/initialized');
 
-    // Discover tools
-    const toolsResult = await this.sendRequest(config.id, {
-      serverId: config.id,
-      method: 'tools/list',
-      params: {},
-      requestId: 2,
-    }, config.timeout);
+      // Discover tools
+      const toolsResult = await this._sendRequest(
+        config.id,
+        {
+          serverId: config.id,
+          method: 'tools/list',
+          params: {},
+          requestId: nextId(),
+        },
+        config.timeout,
+      );
 
-    if (!toolsResult.success) {
-      logger.warn(`Could not list tools for "${config.id}": ${toolsResult.error?.message}`);
-      return [];
-    }
+      if (!toolsResult.success) {
+        logger.warn(
+          `Could not list tools for "${config.id}": ${toolsResult.error?.message}`,
+        );
+        return [];
+      }
 
-    const rawTools = (toolsResult.result as { tools?: unknown[] })?.tools ?? [];
-    return rawTools.map((t: unknown) => {
-      const tool = t as { name: string; description?: string; inputSchema?: Record<string, unknown> };
-      return {
-        name: tool.name,
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-        serverId: config.id,
-        serverName: config.name,
-      } satisfies ToolInfo;
+      const rawTools =
+        (toolsResult.result as { tools?: unknown[] })?.tools ?? [];
+      return rawTools.map((t: unknown) => {
+        const tool = t as {
+          name: string;
+          description?: string;
+          inputSchema?: Record<string, unknown>;
+        };
+        return {
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          serverId: config.id,
+          serverName: config.name,
+        } satisfies ToolInfo;
+      });
     });
   }
 
@@ -85,19 +137,28 @@ export class McpProxy {
     const session = this.sessions.get(serverId);
     if (!session) return;
 
-    // Reject all pending requests
+    // Reject all pending requests before killing the process
     for (const [, pending] of session.pendingRequests) {
       clearTimeout(pending.timer);
       pending.reject(new Error('Server disconnected'));
     }
+    session.pendingRequests.clear();
 
-    session.process.kill('SIGTERM');
+    // Graceful SIGTERM → SIGKILL (fix BUG-003)
+    const proc = session.process;
+    proc.stdin?.destroy();
+    proc.stdout?.destroy();
+    proc.stderr?.destroy();
+    proc.kill('SIGTERM');
+    await new Promise<void>((resolve) => setTimeout(resolve, 300));
+    if (!proc.killed) proc.kill('SIGKILL');
+
     this.sessions.delete(serverId);
     logger.info(`Disconnected from server: ${serverId}`);
   }
 
   async disconnectAll(): Promise<void> {
-    for (const serverId of this.sessions.keys()) {
+    for (const serverId of [...this.sessions.keys()]) {
       await this.disconnect(serverId);
     }
   }
@@ -108,7 +169,7 @@ export class McpProxy {
     serverId: string,
     toolName: string,
     args: Record<string, unknown>,
-    timeout?: number
+    timeout?: number,
   ): Promise<ProxyResponse> {
     if (!this.sessions.has(serverId)) {
       return {
@@ -118,20 +179,32 @@ export class McpProxy {
       };
     }
 
-    const requestId = Date.now();
-    return this.sendRequest(serverId, {
+    return this._sendRequest(
       serverId,
-      method: 'tools/call',
-      params: { name: toolName, arguments: args },
-      requestId,
-    }, timeout ?? 30_000);
+      {
+        serverId,
+        method: 'tools/call',
+        params: { name: toolName, arguments: args },
+        requestId: nextId(),  // fix BUG-002
+      },
+      timeout ?? 30_000,
+    );
   }
 
   // ─── Internal ───────────────────────────────────────────────────────────────
 
-  private spawnSession(config: McpServerConfig): StdioSession {
+  private _spawnSession(config: McpServerConfig): StdioSession {
+    // Expand ${VAR} env references
+    const resolvedEnv: Record<string, string> = {};
+    for (const [k, v] of Object.entries(config.env ?? {})) {
+      resolvedEnv[k] = v.replace(
+        /\$\{([^}]+)\}/g,
+        (_, name) => process.env[name] ?? '',
+      );
+    }
+
     const proc = spawn(config.command!, config.args ?? [], {
-      env: { ...process.env, ...(config.env ?? {}) },
+      env: { ...(process.env as Record<string, string>), ...resolvedEnv },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
@@ -139,26 +212,51 @@ export class McpProxy {
       process: proc,
       pendingRequests: new Map(),
       buffer: '',
+      mutex: new Mutex(),
     };
 
     proc.stdout?.on('data', (chunk: Buffer) => {
       session.buffer += chunk.toString();
-      this.processBuffer(config.id, session);
+      this._drainBuffer(config.id, session);
     });
 
     proc.stderr?.on('data', (chunk: Buffer) => {
       logger.debug(`[${config.id}] stderr: ${chunk.toString().trim()}`);
     });
 
-    proc.on('exit', (code) => {
-      logger.warn(`Server "${config.id}" exited with code ${code}`);
+    // fix BUG-003 & BUG-004
+    proc.on('error', (err) => {
+      logger.error(`[${config.id}] spawn error: ${err.message}`);
+      for (const [, pending] of session.pendingRequests) {
+        clearTimeout(pending.timer);
+        pending.reject(err);
+      }
+      session.pendingRequests.clear();
+      proc.stdin?.destroy();
+      proc.stdout?.destroy();
+      this.sessions.delete(config.id);
+    });
+
+    proc.on('exit', (code, signal) => {
+      logger.warn(
+        `Server "${config.id}" exited (code=${code}, signal=${signal})`,
+      );
+      for (const [, pending] of session.pendingRequests) {
+        clearTimeout(pending.timer);
+        pending.reject(
+          new Error(`MCP server "${config.id}" exited unexpectedly`),
+        );
+      }
+      session.pendingRequests.clear();
+      proc.stdin?.destroy();
+      proc.stdout?.destroy();
       this.sessions.delete(config.id);
     });
 
     return session;
   }
 
-  private processBuffer(serverId: string, session: StdioSession): void {
+  private _drainBuffer(serverId: string, session: StdioSession): void {
     const lines = session.buffer.split('\n');
     session.buffer = lines.pop() ?? '';
 
@@ -180,30 +278,22 @@ export class McpProxy {
             session.pendingRequests.delete(msg.id);
 
             if (msg.error) {
-              pending.resolve({
-                success: false,
-                error: msg.error,
-                durationMs: 0,
-              });
+              pending.resolve({ success: false, error: msg.error, durationMs: 0 });
             } else {
-              pending.resolve({
-                success: true,
-                result: msg.result,
-                durationMs: 0,
-              });
+              pending.resolve({ success: true, result: msg.result, durationMs: 0 });
             }
           }
         }
       } catch {
-        // Not JSON, ignore
+        // Non-JSON line — ignore
       }
     }
   }
 
-  private sendRequest(
+  private _sendRequest(
     serverId: string,
     req: ProxyRequest,
-    timeout = 30_000
+    timeout = 30_000,
   ): Promise<ProxyResponse> {
     const session = this.sessions.get(serverId);
     if (!session) {
@@ -217,7 +307,7 @@ export class McpProxy {
     const startTime = Date.now();
 
     return new Promise((resolve) => {
-      const id = req.requestId ?? Date.now();
+      const id = req.requestId ?? nextId();
       const message = JSON.stringify({
         jsonrpc: '2.0',
         id,
@@ -235,16 +325,14 @@ export class McpProxy {
       }, timeout);
 
       session.pendingRequests.set(id, {
-        resolve: (response) => {
-          resolve({ ...response, durationMs: Date.now() - startTime });
-        },
-        reject: (err) => {
+        resolve: (response) =>
+          resolve({ ...response, durationMs: Date.now() - startTime }),
+        reject: (err) =>
           resolve({
             success: false,
             error: { code: -32000, message: err.message },
             durationMs: Date.now() - startTime,
-          });
-        },
+          }),
         timer,
       });
 
@@ -252,7 +340,11 @@ export class McpProxy {
     });
   }
 
-  private sendNotification(serverId: string, method: string, params?: unknown): void {
+  private _sendNotification(
+    serverId: string,
+    method: string,
+    params?: unknown,
+  ): void {
     const session = this.sessions.get(serverId);
     if (!session) return;
     const message = JSON.stringify({ jsonrpc: '2.0', method, params });

